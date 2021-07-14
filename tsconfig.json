@@ -6,6 +6,6 @@
       "esModuleInterop": true
     },
     "files": [
-        "index-ts.ts"
+        "hmr/index.ts"
     ]
 }

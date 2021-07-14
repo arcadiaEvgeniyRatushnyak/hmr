@@ -1,4 +1,4 @@
-const hmr = require('..');
+const hmr = require('../hmr');
 const path = require('path');
 const chokidar = require('chokidar');
 

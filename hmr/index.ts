@@ -3,6 +3,7 @@ import chokidar from 'chokidar';
 import process from 'process';
 import { throttle } from 'throttle-debounce';
 import { watch } from 'fs';
+import fs from 'fs';
  
 export interface HMREvent {
     added: string[],
@@ -13,30 +14,17 @@ export interface HMREvent {
 class HMR {
     private targetId: string;
     private dependencies: Set<string>;
-    private requireCache : NodeJS.Dict<NodeModule>;
     private callback : (event : HMREvent) => void;
 
     constructor() {
-        this.requireCache = require.cache;
     }
 
     getCacheByModuleId(moduleId : string) : NodeModule {
-        return this.requireCache[moduleId];
+        return require.cache[moduleId];
     }
 
     deleteModuleFromCache(moduleId : string) : void {
-        delete this.requireCache[moduleId];
-    }
-
-    reloadModule(moduleId : string, count : number) : void {
-        try {
-            console.log('Reload module try = ' + count);
-            const m = require(moduleId);
-            console.log(m);
-        } catch(ex) {
-            console.log('Exception thrown');
-            console.log(ex);
-        }
+        delete require.cache[moduleId];
     }
 
     collectDependenciesOfModule(moduleId : string) : string[] {
@@ -56,21 +44,12 @@ class HMR {
                 this.deleteModuleFromCache(id);
             });
 
-            //this.reloadModule(moduleId, 1);
-
             try {
-                // Reload module
                 require(moduleId);
-                console.log(require.cache[moduleId]);
             } catch(ex) {
                 console.log('F some body');
                 console.error(ex);
             }
-
-            // if (this.getCacheByModuleId(moduleId).children.length === 0) {
-            //     console.error('Falt');
-            //     console.error(this.getCacheByModuleId(moduleId));
-            // }
 
             this.getCacheByModuleId(moduleId).children.forEach((child : NodeModule) => {
                 dependencies.push(child.id);
@@ -78,16 +57,6 @@ class HMR {
         }
 
         return dependencies;
-    }
-
-    setupWatcher() : chokidar.FSWatcher {
-        return chokidar.watch(['**/*.js'], {
-            ignoreInitial: true,
-            ignored: [
-              '.git',
-              'node_modules'
-            ]
-        });
     }
     
     watchTargetFile(target : string, callback : (event : HMREvent) => void) : void {
@@ -98,31 +67,17 @@ class HMR {
 
         if (module) {
             this.dependencies = new Set();
-            this.requireCache[moduleId].children.forEach((child : NodeModule) => {
+            require.cache[moduleId].children.forEach((child : NodeModule) => {
                 this.dependencies.add(child.id);
             });
 
-            const watcher = chokidar.watch(['**/*.js'], {
+            chokidar.watch(['**/*.js'], {
                 ignoreInitial: true, 
                 ignored: [
                     '.git',
                     'node_modules'
                 ]
-            })
-            
-            //this.setupWatcher();
-            watcher.on('all',
-            // throttle(500, (event : string, file : string) => {
-            //     console.log(file);
-            //     this.handleFileChange(event, file);
-            // })
-                this.handleFileChange.bind(this)
-            );
-
-            // watch(this.targetId, (event : string, filename : string) => {
-            //     console.log('File changed ' + event + ' ' + filename);
-            //     this.handleFileChange(event, filename);
-            // });
+            }).on('all', this.handleFileChange.bind(this));
         }
     }
     
@@ -132,23 +87,9 @@ class HMR {
         const moduleId : string = path.resolve(file);
         const module : NodeModule = this.getCacheByModuleId(moduleId);
         
-        console.log(moduleId);
-        
         if (module) {
             if (this.targetId === moduleId) {
                 const dependencies : string[] = this.collectDependenciesOfModule(moduleId);
-                if (dependencies.length !== 2) {
-                    console.log('Number of dependencies != 2');
-                    console.log(dependencies);
-                    console.log(this.getCacheByModuleId(moduleId));
-                    const w : string[] = [];
-                    this.getCacheByModuleId(moduleId).children.forEach((child : NodeModule) => {
-                        w.push(child.id);
-                    });
-                    console.log(w);
-                    process.exit(-1);
-                }
-
                 const new_dependencies : string[] = [];
                 const old_dependencies : Set<string> = this.dependencies;
 

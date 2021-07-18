@@ -3,11 +3,14 @@ let target = require('../tests/my-file');
 
 console.log('Application started!');
 
-hmr.hmr('./tests/my-file.js', (event) => {
-    console.log('Change caught');
-    console.log(event);
+let count = 0;
 
-    target = require('../tests/my-file');
-    
+hmr('./tests/my-file.js', (event) => {
+    console.log('Change caught');
+    console.log(event);    
+    if (event.deleted.length !== 0) {
+        count++;
+        console.error('Fail ' + count);
+    }
 });
 

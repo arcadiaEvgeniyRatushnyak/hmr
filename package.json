@@ -29,9 +29,11 @@
   ],
   "dependencies": {
     "chokidar": "^3.5.2",
-    "find-uses-of": "^1.1.0"
+    "find-uses-of": "^1.1.0",
+    "throttle-debounce": "^3.0.1"
   },
   "devDependencies": {
+    "@types/throttle-debounce": "^2.1.0",
     "coveralls": "^3.0.2",
     "eslint": "^5.11.1",
     "eslint-plugin-jest": "^22.1.2",

@@ -1,6 +1,9 @@
 import path from 'path';
 import chokidar from 'chokidar';
-
+import process from 'process';
+import { throttle } from 'throttle-debounce';
+import { watch } from 'fs';
+ 
 export interface HMREvent {
     added: string[],
     modified: string[],
@@ -10,17 +13,83 @@ export interface HMREvent {
 class HMR {
     private targetId: string;
     private dependencies: Set<string>;
-    private parentModuleName : string;
     private requireCache : NodeJS.Dict<NodeModule>;
     private callback : (event : HMREvent) => void;
-    private options : any;
-    private watchDir : string;
 
     constructor() {
-        this.parentModuleName = module.parent.filename;
         this.requireCache = require.cache;
     }
 
+    getCacheByModuleId(moduleId : string) : NodeModule {
+        return this.requireCache[moduleId];
+    }
+
+    deleteModuleFromCache(moduleId : string) : void {
+        delete this.requireCache[moduleId];
+    }
+
+    reloadModule(moduleId : string, count : number) : void {
+        try {
+            console.log('Reload module try = ' + count);
+            const m = require(moduleId);
+            console.log(m);
+        } catch(ex) {
+            console.log('Exception thrown');
+            console.log(ex);
+        }
+    }
+
+    collectDependenciesOfModule(moduleId : string) : string[] {
+        const dependencies : string[] = [];
+        const module = this.getCacheByModuleId(moduleId);
+
+        if (module) {
+            const modulesToReload : string[] = [module.id];
+            let parentModule : NodeModule = module.parent;
+
+            while(parentModule && parentModule.id !== '.') {
+                modulesToReload.push(parentModule.id);
+                parentModule = parentModule.parent;
+            }
+
+            modulesToReload.forEach((id : string) => {
+                this.deleteModuleFromCache(id);
+            });
+
+            //this.reloadModule(moduleId, 1);
+
+            try {
+                // Reload module
+                require(moduleId);
+                console.log(require.cache[moduleId]);
+            } catch(ex) {
+                console.log('F some body');
+                console.error(ex);
+            }
+
+            // if (this.getCacheByModuleId(moduleId).children.length === 0) {
+            //     console.error('Falt');
+            //     console.error(this.getCacheByModuleId(moduleId));
+            // }
+
+            this.getCacheByModuleId(moduleId).children.forEach((child : NodeModule) => {
+                dependencies.push(child.id);
+            });
+        }
+
+        return dependencies;
+    }
+
+    setupWatcher() : chokidar.FSWatcher {
+        return chokidar.watch(['**/*.js'], {
+            ignoreInitial: true,
+            ignored: [
+              '.git',
+              'node_modules'
+            ]
+        });
+    }
+    
     watchTargetFile(target : string, callback : (event : HMREvent) => void) : void {
         const moduleId = path.resolve(target);
         const module = this.getCacheByModuleId(moduleId);
@@ -28,235 +97,88 @@ class HMR {
         this.callback = callback;
 
         if (module) {
-            this.dependencies = new Set(this.collectDependenciesOfModule(moduleId));
-
-            const watcher = this.setupWatcher(target);
-            watcher.on('all', this.handleFileChange.bind(this));
-        }
-    }
-
-    init(target : string, callback : (event : HMREvent) => void) : void {
-        // this.targetId = target;
-        // this.callback = callback;
-        // this.watchDir = path.dirname(target);
-
-        //let watchDir = path.dirname(target);
-        
-        // if (options.watchDir) {
-        //     watchDir = path.resolve(watchDir, options.watchDir);
-        // }
-    
-        // const watcher : chokidar.FSWatcher = this.setupWatcher();
-        // watcher.on('all', this.handleFileChange.bind(this));
-    }
-
-    getCacheByModuleId(moduleId : string) : NodeModule {
-        return this.requireCache[moduleId];
-    }
-
-    reloadModule(moduleId : string) : Promise<any> {
-        delete this.requireCache[moduleId];
-        return import(moduleId);
-    }
-    
-    deleteModuleFromCache(moduleId : string) : void {
-        delete this.requireCache[moduleId];
-        //require(moduleId);
-    }
-
-    collectDependenciesOfModule(moduleId : string) : string[] {
-        const dependencies : string[] = [];
-        const module : NodeModule =  this.getCacheByModuleId(moduleId);
-
-        if (module) {
-            module.children.forEach((child : NodeModule) => {
-                dependencies.push(child.id);
+            this.dependencies = new Set();
+            this.requireCache[moduleId].children.forEach((child : NodeModule) => {
+                this.dependencies.add(child.id);
             });
-        } else {
-            console.log('Fail to find: ' + moduleId);
+
+            const watcher = chokidar.watch(['**/*.js'], {
+                ignoreInitial: true, 
+                ignored: [
+                    '.git',
+                    'node_modules'
+                ]
+            })
+            
+            //this.setupWatcher();
+            watcher.on('all',
+            // throttle(500, (event : string, file : string) => {
+            //     console.log(file);
+            //     this.handleFileChange(event, file);
+            // })
+                this.handleFileChange.bind(this)
+            );
+
+            // watch(this.targetId, (event : string, filename : string) => {
+            //     console.log('File changed ' + event + ' ' + filename);
+            //     this.handleFileChange(event, filename);
+            // });
         }
-
-        return dependencies;
-    }
-
-    gatherDependencies(moduleId : string, onGathered : (list : string[]) => void) : void {
-        delete this.requireCache[moduleId];
-
-        // require([moduleId], (m) => {
-
-        // });
-
-        import(moduleId).then((m) => {
-            const dependencies : string[] = [];
-            const module : NodeModule = this.getCacheByModuleId(moduleId);
-
-            if (module) {
-                module.children.forEach((child : NodeModule) => {
-                    dependencies.push(child.id);
-                });
-            }
-
-            onGathered(dependencies);
-        }).catch((reason : any) => {
-            console.log(reason);
-        });
-    }
-
-    setupWatcher(file : string) : chokidar.FSWatcher {
-        return chokidar.watch([file], {
-            ignoreInitial: true,
-            ignored: [
-              '.git',
-              'node_modules'
-            ]
-            //...this.options.chokidar,
-        });
     }
     
-    handleFileChange(event : any, file : string) : void {
+    handleFileChange(event : string, file : string) : void {
+        if (event !== 'change') return;
+
         const moduleId : string = path.resolve(file);
         const module : NodeModule = this.getCacheByModuleId(moduleId);
-
+        
         console.log(moduleId);
-
+        
         if (module) {
             if (this.targetId === moduleId) {
-                const modulesToReload = [module.id];
-                let parentModule = module.parent;
-
-                while (parentModule && parentModule.id !== '.') {
-                    modulesToReload.push(parentModule.id);
-                    parentModule = parentModule.parent;
+                const dependencies : string[] = this.collectDependenciesOfModule(moduleId);
+                if (dependencies.length !== 2) {
+                    console.log('Number of dependencies != 2');
+                    console.log(dependencies);
+                    console.log(this.getCacheByModuleId(moduleId));
+                    const w : string[] = [];
+                    this.getCacheByModuleId(moduleId).children.forEach((child : NodeModule) => {
+                        w.push(child.id);
+                    });
+                    console.log(w);
+                    process.exit(-1);
                 }
 
-                modulesToReload.forEach((id) => {
-                    this.deleteModuleFromCache(id);
+                const new_dependencies : string[] = [];
+                const old_dependencies : Set<string> = this.dependencies;
+
+                dependencies.forEach((dependency : string) => {
+                    if (old_dependencies.has(dependency)) {
+                        old_dependencies.delete(dependency);
+                    } else {
+                        new_dependencies.push(dependency);
+                    }
                 });
 
-                const dependencies : string[] = [];
-                require(moduleId);
+                this.dependencies = new Set(dependencies);
 
-                this.requireCache[moduleId].children.forEach((child) => {
-                    dependencies.push(child.id);
+                this.callback({
+                    added: new_dependencies,
+                    modified: [],
+                    deleted: Array.from(old_dependencies)
                 });
-
-                console.log(dependencies);
-
-                // import(moduleId).then((value) => {
-
-                //     console.log(value);
-                //     const ff : string[] = [];
-
-                //     this.requireCache[moduleId].children.forEach((child) => {
-                //         ff.push(child.id);
-                //     })
-    
-                //     console.log(ff);
-                // })
-
-            
-                // this.reloadModule(moduleId).then((value) => {
-                //     const dependencies : string[] = [];
-                //     const module : NodeModule = this.getCacheByModuleId(moduleId);
-                
-                //     if (module) {
-                //         value.somefnc('It is working!');
-
-                //         module.children.forEach((child : NodeModule) => {
-                //             dependencies.push(child.id);
-                //         });
-
-                //         console.log('id = ' + moduleId);
-                //         console.log(module.isPreloading);
-                //         console.log(module.loaded);
-                //         console.log(value);
-                //         console.log(dependencies);
-                //     } else {
-                //         console.error('Fail');
-                //     }
-                // }).catch((reason : any) => {
-                //     console.log(reason);
-                // });
-
-                //this.reloadModule(moduleId);
-
-                //console.log('Child list');
-
-                // this.requireCache[moduleId].children.forEach((child : NodeModule) => {
-                //     console.log(child.id);
-                // })
-
-                
-                //this.deleteModuleFromCache(moduleId);
-                //console.log(this.collectDependenciesOfModule(moduleId));
-                //this.callback({added: [], deleted: [], modified: []});
+            } else if (this.dependencies.has(moduleId)) {
+                this.callback({
+                    added: [],
+                    modified: [module.id],
+                    deleted: []
+                });
             }
         }
-
-        // if (module) {
-        //     const modulesToReload : string[] = [module.id];
-        //     let parentModule : NodeModule = module.parent;
-           
-        //     while (parentModule && parentModule.id !== '.') {
-        //        modulesToReload.push(parentModule.id);
-        //        parentModule = parentModule.parent;
-        //     }
-
-        //     modulesToReload.forEach((id : string) => {
-        //         this.deleteModuleFromCache(id);
-        //     });
-
-        //     if (this.target === moduleId) {
-        //         let added_dependencies : string[] = [];
-        //         let deleted_dependencies : Set<string> = this.dependencies;
-        //         let updated_dependencies : string[] = this.collectDependenciesOfModule(moduleId);
-
-        //         updated_dependencies.forEach((id : string) => { 
-        //             if (deleted_dependencies.has(id)) {
-        //                 deleted_dependencies.delete(id);
-        //             } else {
-        //                 added_dependencies.push(id);
-        //             }
-        //         });
-
-        //         this.dependencies = new Set(updated_dependencies);
-        //         console.log(this.dependencies);
-        //         this.callback({added: added_dependencies, deleted: Array.from(deleted_dependencies), modified: []});
-        //     } else {
-        //         this.callback({added: [], deleted: [], modified: [module.id]});
-        //     }
-        // }
-
-        // if (module) {
-        //     const modulesToReload : string[] = [module.id];
-        //     let parentModule : NodeModule = module.parent;
-
-        //     while (parentModule && parentModule.id !== '.') {
-        //         modulesToReload.push(parentModule.id);
-        //         parentModule = parentModule.parent;
-        //     }
-
-        //     modulesToReload.forEach((id) => {
-        //         this.deleteModuleFromCache(id);
-        //     });
-
-        //     console.log(this.getCacheByModuleId(moduleId));
-        // }
-
-        // const moduleId : string = path.resolve(this.watchDir, file);
-        // const module : NodeModule = this.getCacheByModuleId(moduleId);
-
-        // if (module) {
-
-
-        //     if (this.options.debug) {
-        //         console.info({ modulesToReload });
-        //     }
-        // } 
     }   
 }
 
-module.exports.hmr = function (target : string, callback : (event : HMREvent) => void) {
+module.exports = function (target : string, callback : (event : HMREvent) => void) {
     let instance : HMR = new HMR();
     instance.watchTargetFile(target, callback);
 }

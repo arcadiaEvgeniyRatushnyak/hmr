@@ -1,10 +1,6 @@
 import path from 'path';
 import chokidar from 'chokidar';
-import process from 'process';
-import { throttle } from 'throttle-debounce';
-import { watch } from 'fs';
-import fs from 'fs';
- 
+
 export interface HMREvent {
     added: string[],
     modified: string[],
@@ -27,8 +23,8 @@ class HMR {
         delete require.cache[moduleId];
     }
 
-    collectDependenciesOfModule(moduleId : string) : string[] {
-        const dependencies : string[] = [];
+    collectDependenciesOfModule(moduleId : string) : Set<string> {
+        const dependencies : Set<string> = new Set();
         const module = this.getCacheByModuleId(moduleId);
 
         if (module) {
@@ -47,12 +43,11 @@ class HMR {
             try {
                 require(moduleId);
             } catch(ex) {
-                console.log('F some body');
                 console.error(ex);
             }
 
             this.getCacheByModuleId(moduleId).children.forEach((child : NodeModule) => {
-                dependencies.push(child.id);
+                dependencies.add(child.id);
             });
         }
 
@@ -62,12 +57,13 @@ class HMR {
     watchTargetFile(target : string, callback : (event : HMREvent) => void) : void {
         const moduleId = path.resolve(target);
         const module = this.getCacheByModuleId(moduleId);
+       
         this.targetId = moduleId;
+        this.dependencies = new Set();
         this.callback = callback;
 
-        if (module) {
-            this.dependencies = new Set();
-            require.cache[moduleId].children.forEach((child : NodeModule) => {
+        if (module) {            
+            this.getCacheByModuleId(moduleId).children.forEach((child : NodeModule) => {
                 this.dependencies.add(child.id);
             });
 
@@ -77,41 +73,38 @@ class HMR {
                     '.git',
                     'node_modules'
                 ]
-            }).on('all', this.handleFileChange.bind(this));
+            }).on('change', this.handleFileChange.bind(this));
         }
     }
     
-    handleFileChange(event : string, file : string) : void {
-        if (event !== 'change') return;
-
+    handleFileChange(file : string) : void {
         const moduleId : string = path.resolve(file);
         const module : NodeModule = this.getCacheByModuleId(moduleId);
         
         if (module) {
-            if (this.targetId === moduleId) {
-                const dependencies : string[] = this.collectDependenciesOfModule(moduleId);
-                const new_dependencies : string[] = [];
-                const old_dependencies : Set<string> = this.dependencies;
+            if (this.targetId === moduleId) {                
+                const newDependencies : string[] = [];
+                const oldDependencies : Set<string> = this.dependencies;
 
-                dependencies.forEach((dependency : string) => {
-                    if (old_dependencies.has(dependency)) {
-                        old_dependencies.delete(dependency);
+                this.dependencies = this.collectDependenciesOfModule(moduleId);
+
+                this.dependencies.forEach((dependency : string) => {
+                    if (oldDependencies.has(dependency)) {
+                        oldDependencies.delete(dependency);
                     } else {
-                        new_dependencies.push(dependency);
+                        newDependencies.push(dependency);
                     }
                 });
 
-                this.dependencies = new Set(dependencies);
-
                 this.callback({
-                    added: new_dependencies,
+                    added: newDependencies,
                     modified: [],
-                    deleted: Array.from(old_dependencies)
+                    deleted: Array.from(oldDependencies)
                 });
             } else if (this.dependencies.has(moduleId)) {
                 this.callback({
                     added: [],
-                    modified: [module.id],
+                    modified: [moduleId],
                     deleted: []
                 });
             }
@@ -119,7 +112,7 @@ class HMR {
     }   
 }
 
-module.exports = function (target : string, callback : (event : HMREvent) => void) {
-    let instance : HMR = new HMR();
+module.exports = function(target : string, callback : (event : HMREvent) => void) {
+    const instance : HMR = new HMR();
     instance.watchTargetFile(target, callback);
 }

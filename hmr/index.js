@@ -5,7 +5,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 exports.__esModule = true;
 var path_1 = __importDefault(require("path"));
 var chokidar_1 = __importDefault(require("chokidar"));
-var process_1 = __importDefault(require("process"));
 var HMR = /** @class */ (function () {
     function HMR() {
     }
@@ -17,7 +16,7 @@ var HMR = /** @class */ (function () {
     };
     HMR.prototype.collectDependenciesOfModule = function (moduleId) {
         var _this = this;
-        var dependencies = [];
+        var dependencies = new Set();
         var module = this.getCacheByModuleId(moduleId);
         if (module) {
             var modulesToReload = [module.id];
@@ -33,11 +32,10 @@ var HMR = /** @class */ (function () {
                 require(moduleId);
             }
             catch (ex) {
-                console.log('F some body');
                 console.error(ex);
             }
             this.getCacheByModuleId(moduleId).children.forEach(function (child) {
-                dependencies.push(child.id);
+                dependencies.add(child.id);
             });
         }
         return dependencies;
@@ -47,10 +45,10 @@ var HMR = /** @class */ (function () {
         var moduleId = path_1["default"].resolve(target);
         var module = this.getCacheByModuleId(moduleId);
         this.targetId = moduleId;
+        this.dependencies = new Set();
         this.callback = callback;
         if (module) {
-            this.dependencies = new Set();
-            require.cache[moduleId].children.forEach(function (child) {
+            this.getCacheByModuleId(moduleId).children.forEach(function (child) {
                 _this.dependencies.add(child.id);
             });
             chokidar_1["default"].watch(['**/*.js'], {
@@ -59,35 +57,29 @@ var HMR = /** @class */ (function () {
                     '.git',
                     'node_modules'
                 ]
-            }).on('all', this.handleFileChange.bind(this));
+            }).on('change', this.handleFileChange.bind(this));
         }
     };
-    HMR.prototype.handleFileChange = function (event, file) {
-        if (event !== 'change')
-            return;
+    HMR.prototype.handleFileChange = function (file) {
         var moduleId = path_1["default"].resolve(file);
         var module = this.getCacheByModuleId(moduleId);
         if (module) {
             if (this.targetId === moduleId) {
-                var dependencies = this.collectDependenciesOfModule(moduleId);
-                var new_dependencies_1 = [];
-                var old_dependencies_1 = this.dependencies;
-                dependencies.forEach(function (dependency) {
-                    if (old_dependencies_1.has(dependency)) {
-                        old_dependencies_1["delete"](dependency);
+                var newDependencies_1 = [];
+                var oldDependencies_1 = this.dependencies;
+                this.dependencies = this.collectDependenciesOfModule(moduleId);
+                this.dependencies.forEach(function (dependency) {
+                    if (oldDependencies_1.has(dependency)) {
+                        oldDependencies_1["delete"](dependency);
                     }
                     else {
-                        new_dependencies_1.push(dependency);
+                        newDependencies_1.push(dependency);
                     }
                 });
-                this.dependencies = new Set(dependencies);
-                if (this.dependencies.size !== 2) {
-                    process_1["default"].exit(-1);
-                }
                 this.callback({
-                    added: new_dependencies_1,
+                    added: newDependencies_1,
                     modified: [],
-                    deleted: Array.from(old_dependencies_1)
+                    deleted: Array.from(oldDependencies_1)
                 });
             }
             else if (this.dependencies.has(moduleId)) {

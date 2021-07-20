@@ -35,6 +35,7 @@
   "devDependencies": {
     "@types/throttle-debounce": "^2.1.0",
     "coveralls": "^3.0.2",
+    "decache": "^4.6.0",
     "eslint": "^5.11.1",
     "eslint-plugin-jest": "^22.1.2",
     "find-imports": "^1.1.0",

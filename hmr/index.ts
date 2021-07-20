@@ -1,5 +1,6 @@
 import path from 'path';
 import chokidar from 'chokidar';
+import decache from 'decache';
 
 export interface HMREvent {
     added: string[],
@@ -21,6 +22,7 @@ class HMR {
 
     deleteModuleFromCache(moduleId : string) : void {
         delete require.cache[moduleId];
+        decache(moduleId);
     }
 
     collectDependenciesOfModule(moduleId : string) : Set<string> {
@@ -29,12 +31,12 @@ class HMR {
 
         if (module) {
             const modulesToReload : string[] = [module.id];
-            let parentModule : NodeModule = module.parent;
+            // let parentModule : NodeModule = module.parent;
 
-            while(parentModule && parentModule.id !== '.') {
-                modulesToReload.push(parentModule.id);
-                parentModule = parentModule.parent;
-            }
+            // while(parentModule && parentModule.id !== '.') {
+            //     modulesToReload.push(parentModule.id);
+            //     parentModule = parentModule.parent;
+            // }
 
             modulesToReload.forEach((id : string) => {
                 this.deleteModuleFromCache(id);

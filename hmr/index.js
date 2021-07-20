@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 exports.__esModule = true;
 var path_1 = __importDefault(require("path"));
 var chokidar_1 = __importDefault(require("chokidar"));
+var decache_1 = __importDefault(require("decache"));
 var HMR = /** @class */ (function () {
     function HMR() {
     }
@@ -13,6 +14,7 @@ var HMR = /** @class */ (function () {
     };
     HMR.prototype.deleteModuleFromCache = function (moduleId) {
         delete require.cache[moduleId];
+        decache_1["default"](moduleId);
     };
     HMR.prototype.collectDependenciesOfModule = function (moduleId) {
         var _this = this;
@@ -20,11 +22,11 @@ var HMR = /** @class */ (function () {
         var module = this.getCacheByModuleId(moduleId);
         if (module) {
             var modulesToReload = [module.id];
-            var parentModule = module.parent;
-            while (parentModule && parentModule.id !== '.') {
-                modulesToReload.push(parentModule.id);
-                parentModule = parentModule.parent;
-            }
+            // let parentModule : NodeModule = module.parent;
+            // while(parentModule && parentModule.id !== '.') {
+            //     modulesToReload.push(parentModule.id);
+            //     parentModule = parentModule.parent;
+            // }
             modulesToReload.forEach(function (id) {
                 _this.deleteModuleFromCache(id);
             });
@@ -85,7 +87,7 @@ var HMR = /** @class */ (function () {
             else if (this.dependencies.has(moduleId)) {
                 this.callback({
                     added: [],
-                    modified: [module.id],
+                    modified: [moduleId],
                     deleted: []
                 });
             }

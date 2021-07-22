@@ -2,19 +2,20 @@
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
-exports.__esModule = true;
 var path_1 = __importDefault(require("path"));
 var chokidar_1 = __importDefault(require("chokidar"));
-var decache_1 = __importDefault(require("decache"));
+var fs_1 = __importDefault(require("fs"));
 var HMR = /** @class */ (function () {
     function HMR() {
     }
+    HMR.prototype.isValidModule = function (moduleId) {
+        return fs_1["default"].readFileSync(moduleId).toString().trim() !== '';
+    };
     HMR.prototype.getCacheByModuleId = function (moduleId) {
         return require.cache[moduleId];
     };
     HMR.prototype.deleteModuleFromCache = function (moduleId) {
         delete require.cache[moduleId];
-        decache_1["default"](moduleId);
     };
     HMR.prototype.collectDependenciesOfModule = function (moduleId) {
         var _this = this;
@@ -22,20 +23,15 @@ var HMR = /** @class */ (function () {
         var module = this.getCacheByModuleId(moduleId);
         if (module) {
             var modulesToReload = [module.id];
-            // let parentModule : NodeModule = module.parent;
-            // while(parentModule && parentModule.id !== '.') {
-            //     modulesToReload.push(parentModule.id);
-            //     parentModule = parentModule.parent;
-            // }
+            var parentModule = module.parent;
+            while (parentModule && parentModule.id !== '.') {
+                modulesToReload.push(parentModule.id);
+                parentModule = parentModule.parent;
+            }
             modulesToReload.forEach(function (id) {
                 _this.deleteModuleFromCache(id);
             });
-            try {
-                require(moduleId);
-            }
-            catch (ex) {
-                console.error(ex);
-            }
+            require(moduleId);
             this.getCacheByModuleId(moduleId).children.forEach(function (child) {
                 dependencies.add(child.id);
             });
@@ -66,7 +62,7 @@ var HMR = /** @class */ (function () {
         var moduleId = path_1["default"].resolve(file);
         var module = this.getCacheByModuleId(moduleId);
         if (module) {
-            if (this.targetId === moduleId) {
+            if (this.targetId === moduleId && this.isValidModule(moduleId)) {
                 var newDependencies_1 = [];
                 var oldDependencies_1 = this.dependencies;
                 this.dependencies = this.collectDependenciesOfModule(moduleId);

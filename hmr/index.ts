@@ -1,8 +1,8 @@
 import path from 'path';
 import chokidar from 'chokidar';
-import decache from 'decache';
+import fs from 'fs';
 
-export interface HMREvent {
+interface HMREvent {
     added: string[],
     modified: string[],
     deleted: string[]
@@ -16,13 +16,16 @@ class HMR {
     constructor() {
     }
 
+    isValidModule(moduleId : string) : boolean {
+        return fs.readFileSync(moduleId).toString().trim() !== '';
+    }
+
     getCacheByModuleId(moduleId : string) : NodeModule {
         return require.cache[moduleId];
     }
 
     deleteModuleFromCache(moduleId : string) : void {
         delete require.cache[moduleId];
-        decache(moduleId);
     }
 
     collectDependenciesOfModule(moduleId : string) : Set<string> {
@@ -31,22 +34,18 @@ class HMR {
 
         if (module) {
             const modulesToReload : string[] = [module.id];
-            // let parentModule : NodeModule = module.parent;
+            let parentModule : NodeModule = module.parent;
 
-            // while(parentModule && parentModule.id !== '.') {
-            //     modulesToReload.push(parentModule.id);
-            //     parentModule = parentModule.parent;
-            // }
+            while(parentModule && parentModule.id !== '.') {
+                modulesToReload.push(parentModule.id);
+                parentModule = parentModule.parent;
+            }
 
             modulesToReload.forEach((id : string) => {
                 this.deleteModuleFromCache(id);
             });
 
-            try {
-                require(moduleId);
-            } catch(ex) {
-                console.error(ex);
-            }
+            require(moduleId);
 
             this.getCacheByModuleId(moduleId).children.forEach((child : NodeModule) => {
                 dependencies.add(child.id);
@@ -84,12 +83,12 @@ class HMR {
         const module : NodeModule = this.getCacheByModuleId(moduleId);
         
         if (module) {
-            if (this.targetId === moduleId) {                
+            if (this.targetId === moduleId && this.isValidModule(moduleId)) {    
                 const newDependencies : string[] = [];
                 const oldDependencies : Set<string> = this.dependencies;
-
+                
                 this.dependencies = this.collectDependenciesOfModule(moduleId);
-
+                
                 this.dependencies.forEach((dependency : string) => {
                     if (oldDependencies.has(dependency)) {
                         oldDependencies.delete(dependency);
@@ -102,7 +101,7 @@ class HMR {
                     added: newDependencies,
                     modified: [],
                     deleted: Array.from(oldDependencies)
-                });
+                });              
             } else if (this.dependencies.has(moduleId)) {
                 this.callback({
                     added: [],
@@ -114,7 +113,7 @@ class HMR {
     }   
 }
 
-module.exports = function(target : string, callback : (event : HMREvent) => void) {
+export = function(target : string, callback : (event : HMREvent) => void) {
     const instance : HMR = new HMR();
     instance.watchTargetFile(target, callback);
 }

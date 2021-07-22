@@ -7,4 +7,3 @@ console.log('ffff');
 module.exports.somefnc = function(msg) {
     console.log(msg);
 }
-

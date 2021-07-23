@@ -28,8 +28,7 @@ class HMR {
         delete require.cache[moduleId];
     }
 
-    collectDependenciesOfModule(moduleId : string) : Set<string> {
-        const dependencies : Set<string> = new Set();
+    reloadModule(moduleId : string) {
         const module = this.getCacheByModuleId(moduleId);
 
         if (module) {
@@ -44,10 +43,17 @@ class HMR {
             modulesToReload.forEach((id : string) => {
                 this.deleteModuleFromCache(id);
             });
+        }
 
-            require(moduleId);
+        require(moduleId);
+    }
 
-            this.getCacheByModuleId(moduleId).children.forEach((child : NodeModule) => {
+    collectDependenciesOfModule(moduleId : string) : Set<string> {
+        const dependencies : Set<string> = new Set();
+        const module = this.getCacheByModuleId(moduleId);
+
+        if (module) {
+            module.children.forEach((child : NodeModule) => {
                 dependencies.add(child.id);
             });
         }
@@ -58,15 +64,11 @@ class HMR {
     watchTargetFile(target : string, callback : (event : HMREvent) => void) : void {
         const moduleId = path.resolve(target);
         const module = this.getCacheByModuleId(moduleId);
-       
-        this.targetId = moduleId;
-        this.dependencies = new Set();
-        this.callback = callback;
 
         if (module) {            
-            this.getCacheByModuleId(moduleId).children.forEach((child : NodeModule) => {
-                this.dependencies.add(child.id);
-            });
+            this.targetId = moduleId;
+            this.dependencies = this.collectDependenciesOfModule(moduleId);
+            this.callback = callback;
 
             chokidar.watch(['**/*.js'], {
                 ignoreInitial: true, 
@@ -87,6 +89,7 @@ class HMR {
                 const newDependencies : string[] = [];
                 const oldDependencies : Set<string> = this.dependencies;
                 
+                this.reloadModule(moduleId);
                 this.dependencies = this.collectDependenciesOfModule(moduleId);
                 
                 this.dependencies.forEach((dependency : string) => {

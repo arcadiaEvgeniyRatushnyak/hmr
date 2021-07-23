@@ -17,9 +17,8 @@ var HMR = /** @class */ (function () {
     HMR.prototype.deleteModuleFromCache = function (moduleId) {
         delete require.cache[moduleId];
     };
-    HMR.prototype.collectDependenciesOfModule = function (moduleId) {
+    HMR.prototype.reloadModule = function (moduleId) {
         var _this = this;
-        var dependencies = new Set();
         var module = this.getCacheByModuleId(moduleId);
         if (module) {
             var modulesToReload = [module.id];
@@ -31,24 +30,26 @@ var HMR = /** @class */ (function () {
             modulesToReload.forEach(function (id) {
                 _this.deleteModuleFromCache(id);
             });
-            require(moduleId);
-            this.getCacheByModuleId(moduleId).children.forEach(function (child) {
+        }
+        require(moduleId);
+    };
+    HMR.prototype.collectDependenciesOfModule = function (moduleId) {
+        var dependencies = new Set();
+        var module = this.getCacheByModuleId(moduleId);
+        if (module) {
+            module.children.forEach(function (child) {
                 dependencies.add(child.id);
             });
         }
         return dependencies;
     };
     HMR.prototype.watchTargetFile = function (target, callback) {
-        var _this = this;
         var moduleId = path_1["default"].resolve(target);
         var module = this.getCacheByModuleId(moduleId);
-        this.targetId = moduleId;
-        this.dependencies = new Set();
-        this.callback = callback;
         if (module) {
-            this.getCacheByModuleId(moduleId).children.forEach(function (child) {
-                _this.dependencies.add(child.id);
-            });
+            this.targetId = moduleId;
+            this.dependencies = this.collectDependenciesOfModule(moduleId);
+            this.callback = callback;
             chokidar_1["default"].watch(['**/*.js'], {
                 ignoreInitial: true,
                 ignored: [
@@ -65,6 +66,7 @@ var HMR = /** @class */ (function () {
             if (this.targetId === moduleId && this.isValidModule(moduleId)) {
                 var newDependencies_1 = [];
                 var oldDependencies_1 = this.dependencies;
+                this.reloadModule(moduleId);
                 this.dependencies = this.collectDependenciesOfModule(moduleId);
                 this.dependencies.forEach(function (dependency) {
                     if (oldDependencies_1.has(dependency)) {

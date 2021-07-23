@@ -12,85 +12,24 @@ Inspired by this article [https://codeburst.io/dont-use-nodemon-there-are-better
 
 ## API
 ```js
-hmr(callback, [options])
+hmr(target, callback)
 ```
 
+* `target` File to watch. Changes of file and it's dependecies will be caught
 * `callback` Function which will be called each time when some file was changed
-* `options` Options object. Optional
-  * `debug` Show list of modules which was removed from the cache. Default: false
-  * `watchDir` Relative path to the directory to be watched recursively. Default: directory of the  current module
-  * `chokidar` Chokidar [options](https://github.com/paulmillr/chokidar#api)
 
 ## Usage
 ```js
-const hmr = require('node-hmr');
+const hmr = require('./hmr/hmr-handler');
 
-hmr(() => {
-  require('./path_to_your_script');
+hmr('./path-to-your-script', (event) => {
+  console.log(event);
 });
+
 ```
 ## How to use it with frameworks
 You should split your application into two parts first is server setup and second is application module.
 Below are examples of how to use it with some popular frameworks.
-
-## Express.js with HMR example
-
-`app.js`
-```js
-const express = require('express');
-const app = express();
-
-app.get('/', (req, res, next) => {
-  res.send('Express');
-});
-
-module.exports = app;
-```
-
-`bin/www`
-```js
-const http = require('http');
-const hmr = require('node-hmr');
-
-let app;
-
-hmr(() => {
-  app = require('../app');
-}, { watchDir: '../' });
-
-const server = http.createServer((req, res) => app(req, res));
-
-server.listen(3000);
-```
-
-
-## Koa.js with HMR example
-
-`app.js`
-```js
-const Koa = require('koa');
-const app = new Koa();
-
-app.use(async ctx => {
-  ctx.body = 'Koa';
-});
-
-module.exports = app;
-```
-
-`index.js`
-```js
-const hmr = require('node-hmr');
-
-let callback;
-hmr(() => {
-  const app = require('./app');
-  callback = app.callback();
-});
-
-const server = http.createServer((req, res) => callback(req, res));
-server.listen(3000);
-```
 
 ## Limitations
 In some cases, HMR may not work correctly with libraries which using some internal caching storage

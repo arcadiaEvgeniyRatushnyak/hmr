@@ -20,7 +20,7 @@ hmr(target, callback)
 
 ## Usage
 ```js
-const hmr = require('./hmr/hmr-handler');
+const hmr = require('./hmr/index');
 
 hmr('./path-to-your-script', (event) => {
   console.log(event);

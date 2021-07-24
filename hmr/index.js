@@ -31,7 +31,14 @@ var HMR = /** @class */ (function () {
                 _this.deleteModuleFromCache(id);
             });
         }
-        require(moduleId);
+        try {
+            require(moduleId);
+            return true;
+        }
+        catch (err) {
+            console.log(err);
+            return false;
+        }
     };
     HMR.prototype.collectDependenciesOfModule = function (moduleId) {
         var dependencies = new Set();
@@ -61,26 +68,27 @@ var HMR = /** @class */ (function () {
     };
     HMR.prototype.handleFileChange = function (file) {
         var moduleId = path_1["default"].resolve(file);
-        var module = this.getCacheByModuleId(moduleId);
-        if (module) {
+        require(moduleId);
+        if (this.getCacheByModuleId(moduleId)) {
             if (this.targetId === moduleId && this.isValidModule(moduleId)) {
                 var newDependencies_1 = [];
                 var oldDependencies_1 = this.dependencies;
-                this.reloadModule(moduleId);
-                this.dependencies = this.collectDependenciesOfModule(moduleId);
-                this.dependencies.forEach(function (dependency) {
-                    if (oldDependencies_1.has(dependency)) {
-                        oldDependencies_1["delete"](dependency);
-                    }
-                    else {
-                        newDependencies_1.push(dependency);
-                    }
-                });
-                this.callback({
-                    added: newDependencies_1,
-                    modified: [],
-                    deleted: Array.from(oldDependencies_1)
-                });
+                if (this.reloadModule(moduleId)) {
+                    this.dependencies = this.collectDependenciesOfModule(moduleId);
+                    this.dependencies.forEach(function (dependency) {
+                        if (oldDependencies_1.has(dependency)) {
+                            oldDependencies_1["delete"](dependency);
+                        }
+                        else {
+                            newDependencies_1.push(dependency);
+                        }
+                    });
+                    this.callback({
+                        added: newDependencies_1,
+                        modified: [],
+                        deleted: Array.from(oldDependencies_1)
+                    });
+                }
             }
             else if (this.dependencies.has(moduleId)) {
                 this.callback({

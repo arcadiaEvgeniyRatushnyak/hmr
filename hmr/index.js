@@ -1,4 +1,23 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -31,14 +50,7 @@ var HMR = /** @class */ (function () {
                 _this.deleteModuleFromCache(id);
             });
         }
-        try {
-            require(moduleId);
-            return true;
-        }
-        catch (err) {
-            console.log(err);
-            return false;
-        }
+        return Promise.resolve().then(function () { return __importStar(require(moduleId)); });
     };
     HMR.prototype.collectDependenciesOfModule = function (moduleId) {
         var dependencies = new Set();
@@ -50,58 +62,62 @@ var HMR = /** @class */ (function () {
         }
         return dependencies;
     };
-    HMR.prototype.watchTargetFile = function (target, callback) {
+    HMR.prototype.watchTargetFile = function (target, callback, errorHandler) {
+        var _this = this;
         var moduleId = path_1["default"].resolve(target);
-        var module = this.getCacheByModuleId(moduleId);
-        if (module) {
-            this.targetId = moduleId;
-            this.dependencies = this.collectDependenciesOfModule(moduleId);
-            this.callback = callback;
+        this.reloadModule(moduleId).then(function () {
+            _this.targetId = moduleId;
+            _this.dependencies = _this.collectDependenciesOfModule(moduleId);
+            _this.callback = callback;
+            _this.errorHandler = errorHandler;
             chokidar_1["default"].watch(['**/*.js'], {
                 ignoreInitial: true,
                 ignored: [
                     '.git',
                     'node_modules'
                 ]
-            }).on('change', this.handleFileChange.bind(this));
-        }
+            }).on('change', _this.handleFileChange.bind(_this));
+        })["catch"](function (err) {
+            _this.errorHandler(err);
+        });
     };
     HMR.prototype.handleFileChange = function (file) {
+        var _this = this;
         var moduleId = path_1["default"].resolve(file);
-        require(moduleId);
-        if (this.getCacheByModuleId(moduleId)) {
-            if (this.targetId === moduleId && this.isValidModule(moduleId)) {
-                var newDependencies_1 = [];
-                var oldDependencies_1 = this.dependencies;
-                if (this.reloadModule(moduleId)) {
-                    this.dependencies = this.collectDependenciesOfModule(moduleId);
-                    this.dependencies.forEach(function (dependency) {
-                        if (oldDependencies_1.has(dependency)) {
-                            oldDependencies_1["delete"](dependency);
-                        }
-                        else {
-                            newDependencies_1.push(dependency);
-                        }
-                    });
-                    this.callback({
-                        added: newDependencies_1,
-                        modified: [],
-                        deleted: Array.from(oldDependencies_1)
-                    });
-                }
-            }
-            else if (this.dependencies.has(moduleId)) {
-                this.callback({
-                    added: [],
-                    modified: [moduleId],
-                    deleted: []
+        if (this.dependencies.has(moduleId)) {
+            this.callback({
+                added: [],
+                modified: [moduleId],
+                deleted: []
+            });
+        }
+        else if (this.targetId === moduleId && this.isValidModule(moduleId)) {
+            this.reloadModule(moduleId).then(function () {
+                var newDependencies = [];
+                var oldDependencies = _this.dependencies;
+                _this.dependencies = _this.collectDependenciesOfModule(moduleId);
+                _this.dependencies.forEach(function (dependency) {
+                    if (oldDependencies.has(dependency)) {
+                        oldDependencies["delete"](dependency);
+                    }
+                    else {
+                        newDependencies.push(dependency);
+                    }
                 });
-            }
+                _this.callback({
+                    added: newDependencies,
+                    modified: [],
+                    deleted: Array.from(oldDependencies)
+                });
+            })["catch"](function (err) {
+                _this.errorHandler(err);
+            });
         }
     };
     return HMR;
 }());
-module.exports = function (target, callback) {
+module.exports = function (target, callback, errorHandler) {
     var instance = new HMR();
-    instance.watchTargetFile(target, callback);
+    var handler = errorHandler ? errorHandler : function (err) { console.log(err); };
+    instance.watchTargetFile(target, callback, handler);
 };

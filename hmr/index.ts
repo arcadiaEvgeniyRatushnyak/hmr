@@ -60,28 +60,32 @@ class HMR {
 
         return dependencies;
     }
-    
-    watchTargetFile(target : string, callback : (event : HMREvent) => void, errorHandler : (err : any) => void) : void {
+
+    watchTargetFile(target : string, callback : (event : HMREvent) => void, errorHandler : (err : any) => void) : Promise<void> {
         const moduleId = path.resolve(target);
 
-        this.reloadModule(moduleId).then(() => {
-            this.targetId = moduleId;
-            this.dependencies = this.collectDependenciesOfModule(moduleId);
-            this.callback = callback;
-            this.errorHandler = errorHandler;
-            
-            chokidar.watch(['**/*.js'], {
-                ignoreInitial: true, 
-                ignored: [
-                    '.git',
-                    'node_modules'
-                ]
-            }).on('change', this.handleFileChange.bind(this));
-        }).catch((err) => {
-            this.errorHandler(err);
+        return new Promise((resolve, reject) => {
+            this.reloadModule(moduleId).then(() => {
+                this.targetId = moduleId;
+                this.dependencies = this.collectDependenciesOfModule(moduleId);
+                this.callback = callback;
+                this.errorHandler = errorHandler;
+
+                chokidar.watch(['**/*.js'], {
+                    ignoreInitial: true,
+                    ignored: [
+                        '.git',
+                        'node_modules'
+                    ]
+                }).on('change', this.handleFileChange.bind(this));
+
+                resolve();
+            }).catch((err) => {
+                reject(err);
+            });
         });
     }
-    
+
     handleFileChange(file : string) : void {
         const moduleId : string = path.resolve(file);
 
@@ -97,7 +101,7 @@ class HMR {
                 const oldDependencies : Set<string> = this.dependencies;
 
                 this.dependencies = this.collectDependenciesOfModule(moduleId);
-                
+
                 this.dependencies.forEach((dependency : string) => {
                     if (oldDependencies.has(dependency)) {
                         oldDependencies.delete(dependency);
@@ -110,16 +114,16 @@ class HMR {
                     added: newDependencies,
                     modified: [],
                     deleted: Array.from(oldDependencies)
-                });         
+                });
             }).catch((err) => {
                 this.errorHandler(err);
             });
-        }      
-    }   
+        }
+    }
 }
 
-export = function(target : string, callback : (event : HMREvent) => void, errorHandler ?: (err : any) => void) {
+export = function(target : string, callback : (event : HMREvent) => void, errorHandler ?: (err : any) => void) : Promise<any> {
     const instance : HMR = new HMR();
     const handler : (err : any) => void = errorHandler ? errorHandler : (err : any) => { console.log(err); };
-    instance.watchTargetFile(target, callback, handler);
+    return instance.watchTargetFile(target, callback, handler);
 }

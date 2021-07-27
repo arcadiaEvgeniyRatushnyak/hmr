@@ -65,20 +65,23 @@ var HMR = /** @class */ (function () {
     HMR.prototype.watchTargetFile = function (target, callback, errorHandler) {
         var _this = this;
         var moduleId = path_1["default"].resolve(target);
-        this.reloadModule(moduleId).then(function () {
-            _this.targetId = moduleId;
-            _this.dependencies = _this.collectDependenciesOfModule(moduleId);
-            _this.callback = callback;
-            _this.errorHandler = errorHandler;
-            chokidar_1["default"].watch(['**/*.js'], {
-                ignoreInitial: true,
-                ignored: [
-                    '.git',
-                    'node_modules'
-                ]
-            }).on('change', _this.handleFileChange.bind(_this));
-        })["catch"](function (err) {
-            _this.errorHandler(err);
+        return new Promise(function (resolve, reject) {
+            _this.reloadModule(moduleId).then(function () {
+                _this.targetId = moduleId;
+                _this.dependencies = _this.collectDependenciesOfModule(moduleId);
+                _this.callback = callback;
+                _this.errorHandler = errorHandler;
+                chokidar_1["default"].watch(['**/*.js'], {
+                    ignoreInitial: true,
+                    ignored: [
+                        '.git',
+                        'node_modules'
+                    ]
+                }).on('change', _this.handleFileChange.bind(_this));
+                resolve();
+            })["catch"](function (err) {
+                reject(err);
+            });
         });
     };
     HMR.prototype.handleFileChange = function (file) {
@@ -119,5 +122,5 @@ var HMR = /** @class */ (function () {
 module.exports = function (target, callback, errorHandler) {
     var instance = new HMR();
     var handler = errorHandler ? errorHandler : function (err) { console.log(err); };
-    instance.watchTargetFile(target, callback, handler);
+    return instance.watchTargetFile(target, callback, handler);
 };

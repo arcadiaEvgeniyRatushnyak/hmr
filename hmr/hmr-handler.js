@@ -6,9 +6,12 @@ hmr('./tests/my-file.js', (event) => {
 }, (err) => {
     console.log('Error caught:');
     console.log(err);
+}).catch((err) => {
+  console.log('FFFF');
+  console.log(err);  
 });
 
-hmr('./tests/my-file-dep.js', (event) => {
-    console.log('My-file-dep changed:');
-    console.log(event);
-});
+// hmr('./tests/my-file-dep.js', (event) => {
+//     console.log('My-file-dep changed:');
+//     console.log(event);
+// });
